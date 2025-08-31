@@ -3,6 +3,7 @@ import 'package:injectable/injectable.dart';
 import '../../../domain/usecases/get_current_user.dart';
 import '../../../domain/usecases/sign_in_with_google.dart';
 import '../../../domain/usecases/skip_authentication.dart';
+import '../../../domain/usecases/sign_out.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 
@@ -11,11 +12,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SignInWithGoogle _signInWithGoogle;
   final SkipAuthentication _skipAuthentication;
   final GetCurrentUser _getCurrentUser;
+  final SignOut _signOut;
 
   AuthBloc(
     this._signInWithGoogle,
     this._skipAuthentication,
     this._getCurrentUser,
+    this._signOut,
   ) : super(const AuthInitial()) {
     on<AuthSignInWithGoogleRequested>(_onSignInWithGoogleRequested);
     on<AuthSkipRequested>(_onSkipRequested);
@@ -76,7 +79,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthLoading());
-    // Note: SignOut use case would need to be implemented
-    emit(const AuthUnauthenticated());
+
+    final result = await _signOut();
+
+    result.fold(
+      (failure) => emit(AuthError(failure.message)),
+      (_) => emit(const AuthUnauthenticated()),
+    );
   }
 }

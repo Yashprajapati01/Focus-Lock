@@ -20,6 +20,8 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "focuslock/permissions"
+    private val UNINSTALL_CHANNEL = "com.focuslock.admin/uninstall"
+    private val INFO_CHANNEL = "com.focuslock.admin/info"
     private val DEVICE_ADMIN_REQUEST_CODE = 1001
     private val OVERLAY_PERMISSION_REQUEST_CODE = 1002
     private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1003
@@ -44,6 +46,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         
+        // Setup permissions channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 // Admin Permission Methods
@@ -90,6 +93,39 @@ class MainActivity : FlutterActivity() {
                     openUsageStatsSettings(result)
                 }
                 
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        
+        // Setup uninstall channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, UNINSTALL_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "uninstallApp" -> {
+                    val packageName = call.argument<String>("packageName") ?: this.packageName
+                    val silent = call.argument<Boolean>("silent") ?: false
+                    uninstallApp(packageName, silent, result)
+                }
+                "showUninstallDialog" -> {
+                    showUninstallDialog(result)
+                }
+                "canSilentUninstall" -> {
+                    result.success(canPerformSilentUninstall())
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        
+        // Setup info channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, INFO_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getPackageName" -> {
+                    Log.d(TAG, "getPackageName called, returning: $packageName")
+                    result.success(packageName)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -396,5 +432,162 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             Log.d(TAG, "Could not notify Flutter of app resume: ${e.message}")
         }
+    }
+    
+    // ==================== UNINSTALL METHODS ====================
+    
+    private fun uninstallApp(packageName: String, silent: Boolean, result: MethodChannel.Result) {
+        Log.d(TAG, "uninstallApp called with packageName: $packageName, silent: $silent")
+        Log.d(TAG, "Admin active: ${devicePolicyManager.isAdminActive(adminComponent)}")
+        
+        try {
+            if (silent && devicePolicyManager.isAdminActive(adminComponent)) {
+                Log.d(TAG, "Attempting silent uninstall with admin rights")
+                
+                // Remove device admin first to allow uninstall
+                try {
+                    devicePolicyManager.removeActiveAdmin(adminComponent)
+                    Log.d(TAG, "Device admin removed successfully")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to remove device admin: ${e.message}")
+                }
+                
+                // Try direct uninstall using system intent
+                try {
+                    val intent = Intent(Intent.ACTION_DELETE).apply {
+                        data = Uri.parse("package:$packageName")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(intent)
+                    Log.d(TAG, "Uninstall intent started successfully")
+                    result.success(true)
+                    return
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start uninstall intent", e)
+                }
+                
+                // If direct method fails, try shell commands
+                if (attemptSilentUninstallWithShell(packageName, result)) {
+                    return
+                }
+                
+                // If all methods fail, show error
+                result.error("SILENT_UNINSTALL_FAILED", "All silent uninstall methods failed", null)
+            } else {
+                Log.d(TAG, "Using regular uninstall dialog (silent: $silent, admin: ${devicePolicyManager.isAdminActive(adminComponent)})")
+                showUninstallDialog(result)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to uninstall app", e)
+            result.error("UNINSTALL_FAILED", "Failed to uninstall app: ${e.message}", null)
+        }
+    }
+    
+    private fun attemptSilentUninstallWithPackageInstaller(packageName: String, result: MethodChannel.Result): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val packageInstaller = packageManager.packageInstaller
+                val params = android.content.pm.PackageInstaller.SessionParams(
+                    android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
+                )
+                
+                // Create uninstall intent
+                val intent = Intent(this, UninstallReceiver::class.java)
+                val pendingIntent = android.app.PendingIntent.getBroadcast(
+                    this, 0, intent, 
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        android.app.PendingIntent.FLAG_MUTABLE
+                    } else {
+                        0
+                    }
+                )
+                
+                // Attempt silent uninstall
+                packageInstaller.uninstall(packageName, pendingIntent.intentSender)
+                
+                Log.d(TAG, "Silent uninstall initiated via PackageInstaller")
+                result.success(true)
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "PackageInstaller uninstall failed", e)
+            false
+        }
+    }
+    
+    private fun attemptSilentUninstallWithShell(packageName: String, result: MethodChannel.Result): Boolean {
+        return try {
+            Log.d(TAG, "Attempting shell uninstall for package: $packageName")
+            
+            // Try simple pm uninstall command
+            val process = Runtime.getRuntime().exec(arrayOf("pm", "uninstall", packageName))
+            val exitCode = process.waitFor()
+            
+            if (exitCode == 0) {
+                Log.d(TAG, "Shell uninstall successful")
+                result.success(true)
+                return true
+            } else {
+                Log.w(TAG, "Shell uninstall failed with exit code: $exitCode")
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Shell uninstall exception", e)
+            false
+        }
+    }
+    
+    private fun attemptSilentUninstallWithDeviceOwner(packageName: String, result: MethodChannel.Result): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                if (devicePolicyManager.isDeviceOwnerApp(this.packageName)) {
+                    // If we're device owner, we can try to use system-level uninstall
+                    devicePolicyManager.removeActiveAdmin(adminComponent)
+                    
+                    // Use device owner privileges with PackageInstaller
+                    val packageInstaller = packageManager.packageInstaller
+                    val intent = Intent(this, UninstallReceiver::class.java)
+                    val pendingIntent = android.app.PendingIntent.getBroadcast(
+                        this, 0, intent,
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            android.app.PendingIntent.FLAG_MUTABLE
+                        } else {
+                            0
+                        }
+                    )
+                    
+                    packageInstaller.uninstall(packageName, pendingIntent.intentSender)
+                    Log.d(TAG, "Silent uninstall initiated via device owner")
+                    result.success(true)
+                    return true
+                }
+            }
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Device owner uninstall failed", e)
+            false
+        }
+    }
+    
+    private fun showUninstallDialog(result: MethodChannel.Result) {
+        try {
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = Uri.parse("package:$packageName")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to show uninstall dialog", e)
+            result.error("UNINSTALL_DIALOG_FAILED", "Failed to show uninstall dialog: ${e.message}", null)
+        }
+    }
+    
+    private fun canPerformSilentUninstall(): Boolean {
+        return devicePolicyManager.isAdminActive(adminComponent) || 
+               (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && 
+                devicePolicyManager.isDeviceOwnerApp(packageName))
     }
 }

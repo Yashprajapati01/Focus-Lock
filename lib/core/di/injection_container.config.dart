@@ -21,6 +21,8 @@ import 'package:focuslock/features/auth/domain/usecases/get_current_user.dart'
     as _i863;
 import 'package:focuslock/features/auth/domain/usecases/sign_in_with_google.dart'
     as _i1030;
+import 'package:focuslock/features/auth/domain/usecases/sign_out.dart'
+    as _i1032;
 import 'package:focuslock/features/auth/domain/usecases/skip_authentication.dart'
     as _i405;
 import 'package:focuslock/features/auth/presentation/bloc/auth/auth_bloc.dart'
@@ -90,6 +92,9 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i727.PermissionStorageService>(),
       ),
     );
+    gh.factory<_i1032.SignOut>(
+      () => _i1032.SignOut(gh<_i428.AuthRepository>()),
+    );
     gh.lazySingleton<_i863.GetCurrentUser>(
       () => _i863.GetCurrentUser(gh<_i428.AuthRepository>()),
     );
@@ -98,13 +103,6 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i405.SkipAuthentication>(
       () => _i405.SkipAuthentication(gh<_i428.AuthRepository>()),
-    );
-    gh.factory<_i874.AuthBloc>(
-      () => _i874.AuthBloc(
-        gh<_i1030.SignInWithGoogle>(),
-        gh<_i405.SkipAuthentication>(),
-        gh<_i863.GetCurrentUser>(),
-      ),
     );
     gh.lazySingleton<_i602.GetAllPermissions>(
       () => _i602.GetAllPermissions(gh<_i885.PermissionRepository>()),
@@ -120,6 +118,14 @@ extension GetItInjectableX on _i174.GetIt {
     );
     gh.lazySingleton<_i594.RequestPermission>(
       () => _i594.RequestPermission(gh<_i885.PermissionRepository>()),
+    );
+    gh.factory<_i874.AuthBloc>(
+      () => _i874.AuthBloc(
+        gh<_i1030.SignInWithGoogle>(),
+        gh<_i405.SkipAuthentication>(),
+        gh<_i863.GetCurrentUser>(),
+        gh<_i1032.SignOut>(),
+      ),
     );
     gh.factory<_i855.PermissionBloc>(
       () => _i855.PermissionBloc(

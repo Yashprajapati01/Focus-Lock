@@ -4,8 +4,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:focuslock/features/auth/presentation/bloc/auth/auth_bloc.dart';
 import 'package:focuslock/features/permissions/presentation/screen/permissions_screen.dart';
 import 'package:focuslock/features/permissions/presentation/bloc/permission_bloc.dart';
+import 'package:focuslock/features/profile/presentation/pages/profile_screen.dart';
 import 'features/auth/presentation/pages/login_screen.dart';
 import 'features/auth/presentation/pages/splash_screen.dart';
+import 'features/profile/presentation/pages/profile_screen.dart';
 import 'firebase_options.dart';
 import 'core/di/injection_container.dart' as di;
 
@@ -78,6 +80,7 @@ class MyApp extends StatelessWidget {
           '/login': (context) => const LoginScreen(),
           '/permissions': (context) => const PermissionsScreen(),
           '/home': (context) => const HomeScreen(),
+          '/profile': (context) => const ProfileScreen(),
         },
       ),
     );
@@ -94,6 +97,8 @@ class MyApp extends StatelessWidget {
         return MaterialPageRoute(builder: (_) => const PermissionsScreen());
       case '/home':
         return MaterialPageRoute(builder: (_) => const HomeScreen());
+      case '/profile':
+        return MaterialPageRoute(builder: (_) => const ProfileScreen());
       default:
         // Fallback to splash screen for unknown routes
         return MaterialPageRoute(builder: (_) => const SplashScreen());
@@ -113,12 +118,9 @@ class HomeScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.person),
             onPressed: () {
-              // Navigate to settings (placeholder)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings coming soon!')),
-              );
+              Navigator.of(context).pushNamed('/profile');
             },
           ),
         ],
