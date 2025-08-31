@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "62694321703",
+    "project_id": "focuslock-efaac",
+    "storage_bucket": "focuslock-efaac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:62694321703:android:b8bf061ea3a95fb1936802",
+        "android_client_info": {
+          "package_name": "com.example.focuslock"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "62694321703-48eqb0srkka8p03j8c3mhdavv2orrq10.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.focuslock",
+            "certificate_hash": "6a5a582fcbe0b33f35e6fda19e18b2e5e045debd"
+          }
+        },
+        {
+          "client_id": "62694321703-r55vmdvpnej3khh73nijcv2jv5mhgk5b.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjNBBjQIMVgyQoYOuPOWOfcS5Vs-qsXAM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "62694321703-r55vmdvpnej3khh73nijcv2jv5mhgk5b.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "62694321703-e3n0mrmp85nn3cd3j5n4nuroq21a8b5g.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.focuslock"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
