@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
-import 'package:focuslock/features/permissions/domain/entities/permission.dart' as domain;
+import 'package:focuslock/features/permissions/domain/entities/permission.dart'
+    as domain;
 import 'package:injectable/injectable.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/errors/failures.dart';
@@ -26,6 +27,14 @@ class PlatformPermissionServiceImpl implements PlatformPermissionService {
   PlatformPermissionServiceImpl() {
     // Set up method call handler for native callbacks
     _channel.setMethodCallHandler(_handleMethodCall);
+
+    // Listen to app resume events to refresh permission status
+    onAppResumed.listen((_) {
+      // Small delay to ensure system state is updated
+      Future.delayed(const Duration(milliseconds: 300), () {
+        _appResumeController.add(null);
+      });
+    });
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
@@ -55,6 +64,8 @@ class PlatformPermissionServiceImpl implements PlatformPermissionService {
           return await _requestOverlayPermission();
         case domain.PermissionType.calling:
           return await _requestCallingPermission();
+        case domain.PermissionType.accessibility:
+          return await _requestAccessibilityPermission();
       }
     } catch (e) {
       throw PermissionFailure(
@@ -77,6 +88,8 @@ class PlatformPermissionServiceImpl implements PlatformPermissionService {
           return await _getOverlayPermissionStatus();
         case domain.PermissionType.calling:
           return await _getCallingPermissionStatus();
+        case domain.PermissionType.accessibility:
+          return await _getAccessibilityPermissionStatus();
       }
     } catch (e) {
       // Return pending if we can't check the status
@@ -99,6 +112,9 @@ class PlatformPermissionServiceImpl implements PlatformPermissionService {
           break;
         case domain.PermissionType.calling:
           await _openUsageStatsSettings();
+          break;
+        case domain.PermissionType.accessibility:
+          await _openAccessibilitySettings();
           break;
       }
     } catch (e) {
@@ -341,6 +357,78 @@ class PlatformPermissionServiceImpl implements PlatformPermissionService {
     } on PlatformException catch (e) {
       throw PermissionFailure(
         'Failed to open usage stats settings: ${e.message}',
+      );
+    }
+  }
+
+  // Accessibility Permission Methods
+  Future<domain.PermissionStatus> _requestAccessibilityPermission() async {
+    try {
+      if (Platform.isAndroid) {
+        // Check if already granted
+        final hasPermission = await _channel.invokeMethod<bool>(
+          'hasAccessibilityPermission',
+        );
+
+        if (hasPermission == true) {
+          return domain.PermissionStatus.granted;
+        }
+
+        // For accessibility permission, we can only open settings
+        final result = await _channel.invokeMethod<bool>(
+          'requestAccessibilityPermission',
+        );
+
+        // The result indicates if the settings were opened successfully
+        // We need to check the actual permission status after user returns
+        final finalStatus = await _channel.invokeMethod<bool>(
+          'hasAccessibilityPermission',
+        );
+
+        return finalStatus == true
+            ? domain.PermissionStatus.granted
+            : domain.PermissionStatus.pending;
+      } else {
+        // iOS doesn't have accessibility service permissions in the same way
+        return domain.PermissionStatus.denied;
+      }
+    } on PlatformException catch (e) {
+      throw PermissionFailure(
+        'Failed to request accessibility permission: ${e.message}',
+      );
+    }
+  }
+
+  Future<domain.PermissionStatus> _getAccessibilityPermissionStatus() async {
+    try {
+      if (Platform.isAndroid) {
+        // Add a small delay to ensure the service state is updated
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        final result = await _channel.invokeMethod<bool>(
+          'hasAccessibilityPermission',
+        );
+        return result == true
+            ? domain.PermissionStatus.granted
+            : domain.PermissionStatus.pending;
+      } else {
+        return domain.PermissionStatus.denied;
+      }
+    } catch (e) {
+      return domain.PermissionStatus.pending;
+    }
+  }
+
+  Future<void> _openAccessibilitySettings() async {
+    try {
+      if (Platform.isAndroid) {
+        await _channel.invokeMethod('openAccessibilitySettings');
+      } else {
+        await openAppSettings();
+      }
+    } on PlatformException catch (e) {
+      throw PermissionFailure(
+        'Failed to open accessibility settings: ${e.message}',
       );
     }
   }

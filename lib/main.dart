@@ -5,9 +5,10 @@ import 'package:focuslock/features/auth/presentation/bloc/auth/auth_bloc.dart';
 import 'package:focuslock/features/permissions/presentation/screen/permissions_screen.dart';
 import 'package:focuslock/features/permissions/presentation/bloc/permission_bloc.dart';
 import 'package:focuslock/features/profile/presentation/pages/profile_screen.dart';
+import 'package:focuslock/features/session/presentation/bloc/session_bloc.dart';
 import 'features/auth/presentation/pages/login_screen.dart';
 import 'features/auth/presentation/pages/splash_screen.dart';
-import 'features/profile/presentation/pages/profile_screen.dart';
+import 'features/session/presentation/pages/session_screen.dart';
 import 'firebase_options.dart';
 import 'core/di/injection_container.dart' as di;
 
@@ -50,6 +51,10 @@ class MyApp extends StatelessWidget {
           create: (context) => di.sl<PermissionBloc>(),
           lazy: false, // Initialize immediately
         ),
+        BlocProvider<SessionBloc>(
+          create: (context) => di.sl<SessionBloc>(),
+          lazy: false, // Initialize immediately
+        ),
       ],
       child: MaterialApp(
         title: 'Focus Lock',
@@ -79,8 +84,8 @@ class MyApp extends StatelessWidget {
           '/': (context) => const SplashScreen(),
           '/login': (context) => const LoginScreen(),
           '/permissions': (context) => const PermissionsScreen(),
-          '/home': (context) => const HomeScreen(),
-          '/profile': (context) => const ProfileScreen(),
+          '/home': (context) => const SessionScreen(),
+          // '/profile': (context) => const ProfileSheet.show(context),
         },
       ),
     );
@@ -96,93 +101,13 @@ class MyApp extends StatelessWidget {
       case '/permissions':
         return MaterialPageRoute(builder: (_) => const PermissionsScreen());
       case '/home':
-        return MaterialPageRoute(builder: (_) => const HomeScreen());
-      case '/profile':
-        return MaterialPageRoute(builder: (_) => const ProfileScreen());
+        return MaterialPageRoute(builder: (_) => const SessionScreen());
+      // case '/profile':
+      //   return MaterialPageRoute(builder: (_) => const ProfileSheet.show(context));
       default:
         // Fallback to splash screen for unknown routes
         return MaterialPageRoute(builder: (_) => const SplashScreen());
     }
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Focus Lock'),
-        backgroundColor: Colors.blue.shade600,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.of(context).pushNamed('/profile');
-            },
-          ),
-        ],
-      ),
-      body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, size: 80, color: Colors.green),
-            SizedBox(height: 16),
-            Text(
-              'Welcome to Focus Lock!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Setup complete. You\'re ready to stay focused!',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 32),
-            Card(
-              margin: EdgeInsets.all(16),
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Icon(Icons.lock, size: 48, color: Colors.blue),
-                    SizedBox(height: 8),
-                    Text(
-                      'Focus Session',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Start a focus session to block distracting apps',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Start focus session (placeholder)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Focus session feature coming soon!')),
-          );
-        },
-        icon: const Icon(Icons.play_arrow),
-        label: const Text('Start Focus'),
-        backgroundColor: Colors.blue.shade600,
-        foregroundColor: Colors.white,
-      ),
-    );
   }
 }
 

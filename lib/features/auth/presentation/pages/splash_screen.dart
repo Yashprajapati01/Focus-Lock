@@ -5,6 +5,8 @@ import '../bloc/auth/auth_event.dart';
 import '../bloc/auth/auth_state.dart';
 import 'login_screen.dart';
 import '../../../permissions/presentation/screen/permissions_screen.dart';
+import '../../../session/presentation/pages/session_screen.dart';
+import '../../../../core/services/permission_checker_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -20,10 +22,13 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  late PermissionCheckerService _permissionChecker;
 
   @override
   void initState() {
     super.initState();
+
+    _permissionChecker = PermissionCheckerService();
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1500),
@@ -57,31 +62,75 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
+  Future<void> _checkPermissionsAndNavigate() async {
+    try {
+      print('🔍 Starting permission check from splash screen...');
+
+      // Check if all permissions are granted
+      final allPermissionsGranted = await _permissionChecker
+          .areAllPermissionsGranted();
+
+      // Wait for animation to complete
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      if (!mounted) return;
+
+      if (allPermissionsGranted) {
+        print('✅ All permissions granted - navigating to HOME');
+        // All permissions granted, go directly to home
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const SessionScreen(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+      } else {
+        print('❌ Some permissions missing - navigating to PERMISSIONS');
+        // Some permissions missing, go to permissions screen
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const PermissionsScreen(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error checking permissions: $e');
+      // On error, go to permissions screen to be safe
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const PermissionsScreen(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
-            // User is authenticated, go directly to permissions screen
-            Future.delayed(const Duration(milliseconds: 800), () {
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  PageRouteBuilder(
-                    pageBuilder: (context, animation, secondaryAnimation) =>
-                        const PermissionsScreen(),
-                    transitionsBuilder:
-                        (context, animation, secondaryAnimation, child) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: child,
-                          );
-                        },
-                    transitionDuration: const Duration(milliseconds: 500),
-                  ),
-                );
-              }
-            });
+            // User is authenticated, check permissions before navigating
+            _checkPermissionsAndNavigate();
           } else if (state is AuthUnauthenticated) {
             // User is not authenticated, go to login screen
             Future.delayed(const Duration(milliseconds: 800), () {

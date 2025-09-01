@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 
-enum PermissionType { notification, admin, overlay, calling }
+enum PermissionType { notification, admin, overlay, calling, accessibility }
 
 enum PermissionStatus { pending, granted, denied }
 
@@ -55,6 +55,8 @@ extension PermissionTypeExtension on PermissionType {
         return 'Display Over Apps';
       case PermissionType.calling:
         return 'App Usage Access';
+      case PermissionType.accessibility:
+        return 'Accessibility Service';
     }
   }
 
@@ -68,6 +70,8 @@ extension PermissionTypeExtension on PermissionType {
         return 'Allow the app to display lock screens and blocking interfaces over other apps';
       case PermissionType.calling:
         return 'Allow the app to track which apps you use and how often to provide focus insights';
+      case PermissionType.accessibility:
+        return 'Enable accessibility service to prevent app switching during focus sessions';
     }
   }
 
@@ -81,6 +85,8 @@ extension PermissionTypeExtension on PermissionType {
         return Icons.layers;
       case PermissionType.calling:
         return Icons.analytics;
+      case PermissionType.accessibility:
+        return Icons.accessibility;
     }
   }
 }

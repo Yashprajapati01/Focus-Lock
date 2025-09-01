@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:focuslock/features/permissions/domain/entities/permission.dart';
@@ -104,28 +103,38 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                 duration: const Duration(seconds: 2),
               ),
             );
-          } else if (state is PermissionUpdated) {
-            // Check if a permission was just granted and show feedback
-            final grantedPermissions = state.permissions
-                .where((p) => p.isGranted)
-                .length;
-            final previousGranted = state.progress.grantedPermissions;
+          } else if (state is PermissionLoaded || state is PermissionUpdated) {
+            // Check if all permissions are granted on load/update
+            final permissions = state is PermissionLoaded
+                ? state.permissions
+                : (state as PermissionUpdated).permissions;
+            final allGranted =
+                permissions.isNotEmpty && permissions.every((p) => p.isGranted);
 
-            if (grantedPermissions > previousGranted) {
-              // A new permission was granted
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text('Permission granted!'),
-                    ],
+            if (state is PermissionUpdated) {
+              // Check if a permission was just granted and show feedback
+              final grantedPermissions = permissions
+                  .where((p) => p.isGranted)
+                  .length;
+              final previousGranted =
+                  (state as PermissionUpdated).progress.grantedPermissions;
+
+              if (grantedPermissions > previousGranted) {
+                // A new permission was granted
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(width: 8),
+                        Text('Permission granted!'),
+                      ],
+                    ),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 1),
                   ),
-                  backgroundColor: Colors.green,
-                  duration: const Duration(seconds: 1),
-                ),
-              );
+                );
+              }
             }
           }
         },

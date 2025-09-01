@@ -1,6 +1,7 @@
 package com.example.focuslock
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
@@ -12,14 +13,19 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.view.accessibility.AccessibilityManager
+import android.view.KeyEvent
+import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.*
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "focuslock/permissions"
+    private val DEVICE_ADMIN_CHANNEL = "com.focuslock/device_admin"
     private val UNINSTALL_CHANNEL = "com.focuslock.admin/uninstall"
     private val INFO_CHANNEL = "com.focuslock.admin/info"
     private val DEVICE_ADMIN_REQUEST_CODE = 1001
@@ -31,6 +37,10 @@ class MainActivity : FlutterActivity() {
     private lateinit var adminComponent: ComponentName
     private var pendingResult: MethodChannel.Result? = null
     private var pendingPermissionType: String? = null
+    private var isLockModeActive = false
+    private var lockTimer: Timer? = null
+    private var lockStartTime: Long = 0
+    private var lockDurationMs: Long = 0
 
     companion object {
         private const val TAG = "FocusLockMainActivity"
@@ -93,6 +103,66 @@ class MainActivity : FlutterActivity() {
                     openUsageStatsSettings(result)
                 }
                 
+                // Accessibility Permission Methods
+                "requestAccessibilityPermission" -> {
+                    requestAccessibilityPermission(result)
+                }
+                "hasAccessibilityPermission" -> {
+                    result.success(hasAccessibilityPermission())
+                }
+                "openAccessibilitySettings" -> {
+                    openAccessibilitySettings(result)
+                }
+                
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        
+        // Setup device admin channel (for compatibility with existing Flutter code)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_ADMIN_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "hasDeviceAdminPermission" -> {
+                    result.success(devicePolicyManager.isAdminActive(adminComponent))
+                }
+                "hasOverlayPermission" -> {
+                    result.success(canDrawOverlays())
+                }
+                "requestDeviceAdminPermission" -> {
+                    requestAdminPermission(result)
+                }
+                "requestOverlayPermission" -> {
+                    requestOverlayPermission(result)
+                }
+                "hasAccessibilityPermission" -> {
+                    result.success(hasAccessibilityPermission())
+                }
+                "requestAccessibilityPermission" -> {
+                    // For accessibility, we can only open settings, not directly request
+                    openAccessibilitySettings(result)
+                }
+                "startDeviceLock" -> {
+                    val durationMs = when (val duration = call.argument<Any>("durationMs")) {
+                        is Int -> duration.toLong()
+                        is Long -> duration
+                        else -> 60000L
+                    }
+                    startDeviceLock(durationMs, result)
+                }
+                "endDeviceLock" -> {
+                    endDeviceLock(result)
+                }
+                "isLockActive" -> {
+                    result.success(isLockModeActive)
+                }
+                "getRemainingTime" -> {
+                    val remaining = if (isLockModeActive) {
+                        val elapsed = System.currentTimeMillis() - lockStartTime
+                        maxOf(0, lockDurationMs - elapsed)
+                    } else 0
+                    result.success(remaining)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -345,6 +415,65 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // ==================== ACCESSIBILITY PERMISSION METHODS ====================
+    
+    private fun requestAccessibilityPermission(result: MethodChannel.Result) {
+        if (hasAccessibilityPermission()) {
+            result.success(true)
+            return
+        }
+        
+        // For accessibility permission, we can only open settings - cannot directly request
+        pendingResult = result
+        pendingPermissionType = "accessibility"
+        
+        try {
+            val intent = Intent().apply {
+                action = Settings.ACTION_ACCESSIBILITY_SETTINGS
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            // Don't call result.success() here - wait for onResume to check the actual permission status
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open accessibility settings", e)
+            pendingResult = null
+            pendingPermissionType = null
+            result.error("SETTINGS_OPEN_FAILED", "Failed to open accessibility settings: ${e.message}", null)
+        }
+    }
+    
+    private fun hasAccessibilityPermission(): Boolean {
+        try {
+            val enabledServices = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            )
+            
+            val serviceName = "${packageName}/${FocusAccessibilityService::class.java.name}"
+            Log.d(TAG, "Checking accessibility permission for: $serviceName")
+            Log.d(TAG, "Enabled services: $enabledServices")
+            
+            return enabledServices?.contains(serviceName) == true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking accessibility permission", e)
+            return false
+        }
+    }
+    
+    private fun openAccessibilitySettings(result: MethodChannel.Result) {
+        try {
+            val intent = Intent().apply {
+                action = Settings.ACTION_ACCESSIBILITY_SETTINGS
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open accessibility settings", e)
+            result.error("SETTINGS_OPEN_FAILED", "Failed to open accessibility settings: ${e.message}", null)
+        }
+    }
+
     // ==================== ACTIVITY RESULT HANDLERS ====================
     
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -418,6 +547,12 @@ class MainActivity : FlutterActivity() {
                 "admin" -> {
                     val isAdminActive = devicePolicyManager.isAdminActive(adminComponent)
                     pendingResult?.success(isAdminActive)
+                    pendingResult = null
+                    pendingPermissionType = null
+                }
+                "accessibility" -> {
+                    val hasPermission = hasAccessibilityPermission()
+                    pendingResult?.success(hasPermission)
                     pendingResult = null
                     pendingPermissionType = null
                 }
@@ -589,5 +724,183 @@ class MainActivity : FlutterActivity() {
         return devicePolicyManager.isAdminActive(adminComponent) || 
                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && 
                 devicePolicyManager.isDeviceOwnerApp(packageName))
+    }
+    
+    // ==================== DEVICE LOCK METHODS ====================
+    
+    private fun startDeviceLock(durationMs: Long, result: MethodChannel.Result) {
+        try {
+            // Check if we have device admin permission
+            if (!devicePolicyManager.isAdminActive(adminComponent)) {
+                result.error("NO_ADMIN_PERMISSION", "Device admin permission is required", null)
+                return
+            }
+            
+            // Check if we have overlay permission
+            if (!canDrawOverlays()) {
+                result.error("NO_OVERLAY_PERMISSION", "System overlay permission is required", null)
+                return
+            }
+            
+            // Enable kiosk mode
+            enableKioskMode()
+            
+            // Start lock mode
+            isLockModeActive = true
+            lockStartTime = System.currentTimeMillis()
+            lockDurationMs = durationMs
+            
+            // Start the lock screen service
+            val serviceIntent = Intent(this, LockScreenService::class.java).apply {
+                action = LockScreenService.ACTION_START_LOCK
+                putExtra(LockScreenService.EXTRA_DURATION_SECONDS, (durationMs / 1000).toInt())
+            }
+            startService(serviceIntent)
+            
+            // Start timer to automatically end lock
+            startLockTimer(durationMs)
+            
+            // Lock the device immediately
+            devicePolicyManager.lockNow()
+            
+            Log.d(TAG, "Device lock started successfully for ${durationMs}ms")
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start device lock", e)
+            result.error("DEVICE_LOCK_FAILED", "Failed to start device lock: ${e.message}", null)
+        }
+    }
+    
+    private fun endDeviceLock(result: MethodChannel.Result) {
+        try {
+            // Disable kiosk mode
+            disableKioskMode()
+            
+            // Stop lock mode
+            isLockModeActive = false
+            lockTimer?.cancel()
+            lockTimer = null
+            
+            // Stop the lock screen service
+            val serviceIntent = Intent(this, LockScreenService::class.java).apply {
+                action = LockScreenService.ACTION_STOP_LOCK
+            }
+            startService(serviceIntent)
+            
+            Log.d(TAG, "Device lock ended")
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to end device lock", e)
+            result.error("DEVICE_UNLOCK_FAILED", "Failed to end device lock: ${e.message}", null)
+        }
+    }
+    
+    private fun enableKioskMode() {
+        try {
+            // Set flags to prevent user from leaving the app
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+            
+            // Hide system UI
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                window.decorView.systemUiVisibility = (
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                    android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                )
+            }
+            
+            Log.d(TAG, "Kiosk mode enabled")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to enable kiosk mode", e)
+        }
+    }
+    
+    private fun disableKioskMode() {
+        try {
+            // Clear flags
+            window.clearFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+            
+            // Restore system UI
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                window.decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+            }
+            
+            Log.d(TAG, "Kiosk mode disabled")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to disable kiosk mode", e)
+        }
+    }
+    
+    private fun startLockTimer(durationMs: Long) {
+        lockTimer?.cancel()
+        lockTimer = Timer()
+        
+        lockTimer?.schedule(object : TimerTask() {
+            override fun run() {
+                runOnUiThread {
+                    // Automatically end lock when timer expires
+                    endDeviceLock(object : MethodChannel.Result {
+                        override fun success(result: Any?) {
+                            Log.d(TAG, "Lock timer expired, lock ended automatically")
+                        }
+                        override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                            Log.e(TAG, "Failed to end lock automatically: $errorMessage")
+                        }
+                        override fun notImplemented() {}
+                    })
+                }
+            }
+        }, durationMs)
+    }
+    
+    // Override key events to prevent back button and home button
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (isLockModeActive) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_BACK,
+                KeyEvent.KEYCODE_HOME,
+                KeyEvent.KEYCODE_MENU,
+                KeyEvent.KEYCODE_APP_SWITCH -> {
+                    Log.d(TAG, "Blocked key event: $keyCode during lock mode")
+                    return true // Block the key event
+                }
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+    
+    // Prevent app from being moved to background during lock mode
+    override fun onUserLeaveHint() {
+        if (isLockModeActive) {
+            Log.d(TAG, "Prevented app from going to background during lock mode")
+            return // Don't call super to prevent backgrounding
+        }
+        super.onUserLeaveHint()
+    }
+    
+    // Handle app lifecycle to maintain lock
+    override fun onPause() {
+        if (isLockModeActive) {
+            Log.d(TAG, "App paused during lock mode, bringing back to foreground")
+            // Bring app back to foreground immediately
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            startActivity(intent)
+        }
+        super.onPause()
     }
 }
