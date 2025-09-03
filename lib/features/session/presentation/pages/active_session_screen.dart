@@ -170,71 +170,71 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
     );
   }
 
-  Widget _buildActiveSessionView() {
-    return Stack(
-      children: [
-        // Main content
-        Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Session status
-              Text(
-                'Focus Session Active',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w300,
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // Timer display with breathing animation
-              AnimatedBuilder(
-                animation: _breathingAnimation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _breathingAnimation.value,
-                    child: SessionTimerDisplay(
-                      remainingTime: widget.remainingTime,
-                      totalDuration: widget.totalDuration,
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 60),
-
-              // Progress bar
-              _buildProgressBar(),
-
-              const SizedBox(height: 40),
-
-              // Focus tip
-              _buildFocusTip(),
-            ],
-          ),
-        ),
-
-        // Emergency exit button (hidden, activated by specific gesture)
-        Positioned(
-          top: 20,
-          right: 20,
-          child: GestureDetector(
-            onLongPress: _handleEmergencyExit,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildActiveSessionView() {
+  //   return Stack(
+  //     children: [
+  //       // Main content
+  //       Center(
+  //         child: Column(
+  //           mainAxisAlignment: MainAxisAlignment.center,
+  //           children: [
+  //             // Session status
+  //             Text(
+  //               'Focus Session Active',
+  //               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+  //                 color: Colors.white70,
+  //                 fontWeight: FontWeight.w300,
+  //               ),
+  //             ),
+  //
+  //             const SizedBox(height: 40),
+  //
+  //             // Timer display with breathing animation
+  //             AnimatedBuilder(
+  //               animation: _breathingAnimation,
+  //               builder: (context, child) {
+  //                 return Transform.scale(
+  //                   scale: _breathingAnimation.value,
+  //                   child: SessionTimerDisplay(
+  //                     remainingTime: widget.remainingTime,
+  //                     totalDuration: widget.totalDuration,
+  //                   ),
+  //                 );
+  //               },
+  //             ),
+  //
+  //             const SizedBox(height: 60),
+  //
+  //             // Progress bar
+  //             _buildProgressBar(),
+  //
+  //             const SizedBox(height: 40),
+  //
+  //             // Focus tip
+  //             _buildFocusTip(),
+  //           ],
+  //         ),
+  //       ),
+  //
+  //       // Emergency exit button (hidden, activated by specific gesture)
+  //       Positioned(
+  //         top: 20,
+  //         right: 20,
+  //         child: GestureDetector(
+  //           onLongPress: _handleEmergencyExit,
+  //           child: Container(
+  //             width: 40,
+  //             height: 40,
+  //             decoration: BoxDecoration(
+  //               color: Colors.transparent,
+  //               borderRadius: BorderRadius.circular(20),
+  //             ),
+  //           ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   Widget _buildCompletionView() {
     return Center(
@@ -321,6 +321,89 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen>
         ),
       ),
     );
+  }
+
+  Widget _buildActiveSessionView() {
+    final endTime = widget.startTime.add(widget.totalDuration);
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // Top logo
+        Padding(
+          padding: const EdgeInsets.only(top: 16.0),
+          child: Text(
+            "Focus Lock",
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 2,
+            ),
+          ),
+        ),
+
+        // Center timer
+        Expanded(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDigitalTimer(widget.remainingTime),
+              ],
+            ),
+          ),
+        ),
+
+        // Bottom controls
+        Padding(
+          padding: const EdgeInsets.only(bottom: 32.0),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  GestureDetector(
+                    onTap: _handleEmergencyExit,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      child: Icon(Icons.stop, size: 32, color: Colors.black),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "End of session at ${_formatTime(endTime)}",
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDigitalTimer(Duration remaining) {
+    final hours = remaining.inHours.toString().padLeft(2, "0");
+    final minutes = (remaining.inMinutes % 60).toString().padLeft(2, "0");
+    final seconds = (remaining.inSeconds % 60).toString().padLeft(2, "0");
+
+    return Column(
+      children: [
+        Text(hours, style: TextStyle(fontSize: 100, color: Colors.white)),
+        Text(minutes, style: TextStyle(fontSize: 100, color: Colors.grey.shade400)),
+        Text(seconds, style: TextStyle(fontSize: 100, color: Colors.grey.shade600)),
+      ],
+    );
+  }
+
+  String _formatTime(DateTime time) {
+    return "${time.hour}:${time.minute}:${time.second} ${time.hour >= 12 ? "pm" : "am"}";
   }
 
   String _formatDuration(Duration duration) {
